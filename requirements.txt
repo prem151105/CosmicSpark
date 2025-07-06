@@ -1,37 +1,4 @@
-# Web Crawling
-scrapy>=2.11.0
+# WEB Crawler
+PyMuPDF>=1.23.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
-selenium>=4.15.0
-
-# PDF/Document Processing
-PyMuPDF>=1.23.0
-python-docx>=0.8.11
-openpyxl>=3.1.0
-
-# NLP & LLM
-spacy>=3.7.0
-transformers>=4.35.0
-sentence-transformers>=2.2.0
-langchain>=0.0.350
-ollama>=0.1.0
-
-# Knowledge Graph
-neo4j>=5.15.0
-networkx>=3.2.0
-py2neo>=2021.2.4
-
-# Vector Database
-chromadb>=0.4.0
-
-# API & Frontend
-fastapi>=0.104.0
-streamlit>=1.28.0
-uvicorn>=0.24.0
-plotly>=5.17.0
-streamlit-chat>=0.1.0
-
-# Utilities
-pandas>=2.1.0
-numpy>=1.25.0
-python-dotenv>=1.0.0
