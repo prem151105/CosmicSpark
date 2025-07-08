@@ -1,22 +1,40 @@
 """
-Logging utility for the application
+Logging configuration for MOSDAC AI Help Bot
 """
 
-import logging
 import sys
-from const import LOG_FORMAT, LOG_LEVEL
+import os
+from loguru import logger
+from .config import get_settings
 
 def setup_logger():
-    """Setup application logger"""
-    logging.basicConfig(
-        level=getattr(logging, LOG_LEVEL),
-        format=LOG_FORMAT,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler('app.log')
-        ]
+    """Setup application logging"""
+    settings = get_settings()
+    
+    # Remove default handler
+    logger.remove()
+    
+    # Console handler
+    logger.add(
+        sys.stdout,
+        level=settings.LOG_LEVEL,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        colorize=True
     )
-
-def get_logger(name):
-    """Get logger instance"""
-    return logging.getLogger(name)
+    
+    # File handler
+    log_dir = os.path.dirname(settings.LOG_FILE)
+    if log_dir:  # Only try to create directory if a path is specified
+        os.makedirs(log_dir, exist_ok=True)
+    
+    if settings.LOG_FILE:  # Only add file handler if LOG_FILE is not empty
+        logger.add(
+            settings.LOG_FILE,
+            level=settings.LOG_LEVEL,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            rotation="10 MB",
+            retention="30 days",
+            compression="zip"
+        )
+    
+    return logger

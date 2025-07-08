@@ -1,4 +1,70 @@
-# WEB Crawler
-PyMuPDF>=1.23.0
+# Core Dependencies
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+streamlit>=1.28.0
+pydantic>=2.5.0
+
+# Web Crawling
+scrapy>=2.11.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
+selenium>=4.15.0
+PyMuPDF>=1.23.0
+python-docx>=1.1.0
+
+# NLP and ML - Install with specific versions that have wheels
+spacy>=3.7.0
+transformers>=4.35.0
+sentence-transformers>=2.2.0
+torch>=2.1.0
+numpy>=1.24.0
+pandas>=2.1.0
+
+# Knowledge Graph
+neo4j
+networkx
+py2neo
+
+# Vector Database
+chromadb
+langchain
+langchain-community
+
+# LLM Integration
+ollama
+
+# Frontend
+plotly
+streamlit-chat
+streamlit-agraph
+
+# Utilities
+python-dotenv
+aiofiles
+httpx
+pytest
+pytest-asyncio
+
+# Data Processing
+scikit-learn
+nltk
+textstat
+
+# Monitoring and Logging
+loguru
+prometheus-client
+
+# Development
+black
+flake8
+pre-commit
+
+# Graph Neural Networks
+torch-geometric
+dgl
+
+# Additional ML Libraries
+faiss-cpu
+rank-bm25
+streamlit-option-menu
+rank-bm25>=0.2.2
