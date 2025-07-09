@@ -105,8 +105,34 @@ class LLMEntityExtractor:
         import os
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-        self.embedding_model = SentenceTransformer(model_name, device='cpu')
-        self.nlp = spacy.load("en_core_web_sm")
+        
+        try:
+            self.embedding_model = SentenceTransformer(model_name, device='cpu')
+        except Exception as e:
+            logger.warning(f"Failed to load embedding model {model_name}: {e}")
+            self.embedding_model = None
+        
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            logger.warning(f"Failed to load spaCy model en_core_web_sm: {e}")
+            logger.info("Attempting to download spaCy model...")
+            try:
+                import subprocess
+                result = subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"], 
+                                      capture_output=True, text=True, check=True)
+                logger.info(f"spaCy download output: {result.stdout}")
+                self.nlp = spacy.load("en_core_web_sm")
+                logger.info("Successfully downloaded and loaded spaCy model")
+            except subprocess.CalledProcessError as download_error:
+                logger.error(f"Failed to download spaCy model: {download_error}")
+                logger.error(f"Download stderr: {download_error.stderr}")
+                logger.warning("Continuing without spaCy model - using fallback entity extraction")
+                self.nlp = None
+            except Exception as download_error:
+                logger.error(f"Failed to download spaCy model: {download_error}")
+                logger.warning("Continuing without spaCy model - using fallback entity extraction")
+                self.nlp = None
         
         # Domain-specific entity types for MOSDAC
         self.entity_types = {
@@ -122,57 +148,103 @@ class LLMEntityExtractor:
         
         # Create embeddings for entity types
         self.type_embeddings = {}
-        for entity_type, examples in self.entity_types.items():
-            type_text = f"{entity_type.lower()} {' '.join(examples)}"
-            self.type_embeddings[entity_type] = self.embedding_model.encode([type_text])[0]
+        if self.embedding_model is not None:
+            for entity_type, examples in self.entity_types.items():
+                type_text = f"{entity_type.lower()} {' '.join(examples)}"
+                try:
+                    self.type_embeddings[entity_type] = self.embedding_model.encode([type_text])[0]
+                except Exception as e:
+                    logger.warning(f"Failed to create embedding for {entity_type}: {e}")
+        else:
+            logger.warning("Embedding model not available, skipping type embeddings")
     
     def extract_entities_with_llm(self, text: str) -> List[Entity]:
         """Extract entities using LLM-enhanced NER"""
-        doc = self.nlp(text)
         entities = []
         
         # Standard spaCy entities
-        for ent in doc.ents:
-            entity = Entity(
-                id=f"ent_{len(entities)}",
-                name=ent.text,
-                type=ent.label_,
-                description=f"{ent.label_} entity: {ent.text}",
-                properties={
-                    "start": ent.start_char,
-                    "end": ent.end_char,
-                    "spacy_label": ent.label_
-                },
-                confidence=0.8,  # Default confidence for spaCy
-                source="spacy_ner",
-                timestamp=datetime.now()
-            )
-            entities.append(entity)
+        if self.nlp is not None:
+            doc = self.nlp(text)
+            for ent in doc.ents:
+                    entity = Entity(
+                        id=f"ent_{len(entities)}",
+                        name=ent.text,
+                        type=ent.label_,
+                        description=f"{ent.label_} entity: {ent.text}",
+                        properties={
+                            "start": ent.start_char,
+                            "end": ent.end_char,
+                            "spacy_label": ent.label_
+                        },
+                        confidence=0.8,  # Default confidence for spaCy
+                        source="spacy_ner",
+                        timestamp=datetime.now()
+                    )
+                    entities.append(entity)
         
         # Domain-specific entity extraction
-        text_embedding = self.embedding_model.encode([text])[0]
+        if self.embedding_model is not None and self.type_embeddings:
+            try:
+                text_embedding = self.embedding_model.encode([text])[0]
+            except Exception as e:
+                logger.warning(f"Failed to encode text for entity extraction: {e}")
+                return entities
         
-        # Find domain-specific entities using semantic similarity
-        for entity_type, type_embedding in self.type_embeddings.items():
-            similarity = np.dot(text_embedding, type_embedding) / (
-                np.linalg.norm(text_embedding) * np.linalg.norm(type_embedding)
-            )
-            
-            if similarity > 0.3:  # Threshold for relevance
-                # Extract specific terms related to this entity type
-                for term in self.entity_types[entity_type]:
-                    if term.lower() in text.lower():
+            # Find domain-specific entities using semantic similarity
+            for entity_type, type_embedding in self.type_embeddings.items():
+                    similarity = np.dot(text_embedding, type_embedding) / (
+                        np.linalg.norm(text_embedding) * np.linalg.norm(type_embedding)
+                    )
+                    
+                    if similarity > 0.3:  # Threshold for relevance
+                        # Extract specific terms related to this entity type
+                        for term in self.entity_types[entity_type]:
+                            if term.lower() in text.lower():
+                                entity = Entity(
+                                    id=f"domain_ent_{len(entities)}",
+                                    name=term,
+                                    type=entity_type,
+                                    description=f"Domain-specific {entity_type.lower()}: {term}",
+                                    properties={
+                                        "similarity_score": float(similarity),
+                                        "domain_specific": True
+                                    },
+                                    confidence=float(similarity),
+                                    source="domain_extraction",
+                                    timestamp=datetime.now()
+                                )
+                                entities.append(entity)
+        
+        # If no entities found and spaCy is not available, use fallback
+        if not entities and self.nlp is None:
+            entities = self.fallback_entity_extraction(text)
+        
+        return entities
+    
+    def fallback_entity_extraction(self, text: str) -> List[Entity]:
+        """Fallback entity extraction using simple pattern matching"""
+        entities = []
+        text_lower = text.lower()
+        
+        # Simple pattern-based extraction for MOSDAC domain
+        for entity_type, keywords in self.entity_types.items():
+            for keyword in keywords:
+                if keyword.lower() in text_lower:
+                    # Find the position of the keyword
+                    start_pos = text_lower.find(keyword.lower())
+                    if start_pos != -1:
                         entity = Entity(
-                            id=f"domain_ent_{len(entities)}",
-                            name=term,
+                            id=f"fallback_ent_{len(entities)}",
+                            name=keyword,
                             type=entity_type,
-                            description=f"Domain-specific {entity_type.lower()}: {term}",
+                            description=f"Pattern-matched {entity_type.lower()}: {keyword}",
                             properties={
-                                "similarity_score": float(similarity),
-                                "domain_specific": True
+                                "start": start_pos,
+                                "end": start_pos + len(keyword),
+                                "extraction_method": "pattern_matching"
                             },
-                            confidence=float(similarity),
-                            source="domain_extraction",
+                            confidence=0.6,  # Lower confidence for pattern matching
+                            source="fallback_extraction",
                             timestamp=datetime.now()
                         )
                         entities.append(entity)
@@ -201,8 +273,18 @@ class RelationshipMapper:
         import os
         os.environ['TOKENIZERS_PARALLELISM'] = 'false'
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
-        self.nlp = spacy.load("en_core_web_sm")
+        
+        try:
+            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        except Exception as e:
+            logger.warning(f"Failed to load embedding model: {e}")
+            self.embedding_model = None
+        
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            logger.warning(f"Failed to load spaCy model in RelationshipMapper: {e}")
+            self.nlp = None
         
         # Predefined relationship patterns for MOSDAC domain
         self.relationship_patterns = {
@@ -355,41 +437,18 @@ class DynamicKnowledgeGraph:
         self.version = 1
         self.change_log = []
     
-    def _test_connection_with_retry(self, max_retries: int = 5, delay: float = 2.0):
-        """Test Neo4j connection with retry logic"""
-        for attempt in range(max_retries):
-            try:
-                with self.driver.session() as session:
-                    # Test basic read operation
-                    result = session.run("RETURN 1").single()
-                    if result and result[0] == 1:
-                        logger.info("✅ Successfully connected to Neo4j database")
-                        return True
-                    
-                    # If we get here, connection succeeded but query failed
-                    raise Exception("Connection test query failed")
-                    
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = delay * (attempt + 1)  # Exponential backoff
-                    logger.warning(
-                        f"⚠️ Failed to connect to Neo4j (attempt {attempt + 1}/{max_retries}). "
-                        f"Retrying in {wait_time:.1f} seconds... Error: {str(e)}"
-                    )
-                    time.sleep(wait_time)
-                else:
-                    error_msg = f"❌ Failed to connect to Neo4j after {max_retries} attempts: {str(e)}"
-                    logger.error(error_msg)
-                    
-                    # Provide helpful troubleshooting steps
-                    logger.info("\nTroubleshooting steps:")
-                    logger.info("1. Make sure Neo4j container is running: `docker ps | grep neo4j`")
-                    logger.info("2. Check Neo4j logs: `docker logs cosmic-spark-neo4j-1`")
-                    logger.info("3. Verify credentials in .env match those in docker-compose.yml")
-                    logger.info("4. Try accessing Neo4j Browser at http://localhost:7474")
-                    
-                    # Don't raise the error, just log it and continue
-                    return False
+    def _test_connection_with_retry(self, max_retries: int = 1, delay: float = 1.0):
+        """Test Neo4j connection with silent failure"""
+        try:
+            with self.driver.session() as session:
+                result = session.run("RETURN 1").single()
+                if result and result[0] == 1:
+                    logger.info("✅ Successfully connected to Neo4j database")
+                    return True
+        except Exception:
+            # Silently ignore connection errors
+            pass
+        return False
         
     def create_schema(self, documents: List[str]) -> Dict[str, Any]:
         """Create dynamic schema based on document content"""

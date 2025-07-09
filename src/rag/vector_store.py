@@ -19,6 +19,7 @@ import io
 import json
 from pathlib import Path
 import faiss
+import shutil
 from loguru import logger
 
 @dataclass
@@ -139,18 +140,52 @@ class AdvancedVectorStore:
         logger.info(f"Advanced Vector Store initialized with collection: {collection_name}")
     
     def _get_or_create_collection(self):
-        """Get or create ChromaDB collection"""
+        """Get or create ChromaDB collection with schema compatibility handling"""
         try:
             collection = self.client.get_collection(name=self.collection_name)
             logger.info(f"Loaded existing collection: {self.collection_name}")
-        except:
-            collection = self.client.create_collection(
-                name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}
-            )
-            logger.info(f"Created new collection: {self.collection_name}")
-        
-        return collection
+            return collection
+        except Exception as e:
+            logger.warning(f"Failed to load existing collection: {e}")
+            
+            # Handle schema compatibility issues
+            if "no such column" in str(e).lower() or "sqlite3.operationalerror" in str(e).lower():
+                logger.info("Detected ChromaDB schema incompatibility, resetting database...")
+                try:
+                    # Try to delete the existing collection if it exists
+                    try:
+                        self.client.delete_collection(name=self.collection_name)
+                        logger.info(f"Deleted incompatible collection: {self.collection_name}")
+                    except:
+                        pass
+                    
+                    # Reset the client to clear any cached schema
+                    import shutil
+                    if self.persist_directory.exists():
+                        logger.info("Removing incompatible ChromaDB data...")
+                        shutil.rmtree(self.persist_directory)
+                        self.persist_directory.mkdir(parents=True, exist_ok=True)
+                    
+                    # Reinitialize client
+                    self.client = chromadb.PersistentClient(
+                        path=str(self.persist_directory),
+                        settings=Settings(anonymized_telemetry=False)
+                    )
+                    
+                except Exception as reset_error:
+                    logger.error(f"Failed to reset ChromaDB: {reset_error}")
+            
+            # Create new collection
+            try:
+                collection = self.client.create_collection(
+                    name=self.collection_name,
+                    metadata={"hnsw:space": "cosine"}
+                )
+                logger.info(f"Created new collection: {self.collection_name}")
+                return collection
+            except Exception as create_error:
+                logger.error(f"Failed to create collection: {create_error}")
+                raise
     
     def _encode_text(self, text: str) -> np.ndarray:
         """Encode text using sentence transformer"""

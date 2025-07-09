@@ -60,7 +60,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Configuration
-API_BASE_URL = "http://localhost:8000"
+import os
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 SESSION_ID = str(uuid.uuid4())
 
 # Initialize session state
@@ -79,23 +80,33 @@ def make_api_request(endpoint: str, method: str = "GET", data: Dict = None) -> D
     try:
         url = f"{API_BASE_URL}{endpoint}"
         
+        # Debug: Show the URL being called
+        if st.session_state.get('debug_mode', False):
+            st.info(f"Making {method} request to: {url}")
+        
         if method == "GET":
-            response = requests.get(url)
+            response = requests.get(url, timeout=30)
         elif method == "POST":
-            response = requests.post(url, json=data)
+            response = requests.post(url, json=data, timeout=30)
         else:
             raise ValueError(f"Unsupported method: {method}")
         
         if response.status_code == 200:
-            return response.json()
+            result = response.json()
+            if st.session_state.get('debug_mode', False):
+                st.success(f"API request successful: {response.status_code}")
+            return result
         else:
             st.error(f"API Error: {response.status_code} - {response.text}")
             return {}
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to API. Please ensure the backend is running.")
+    except requests.exceptions.ConnectionError as e:
+        st.error(f"Cannot connect to API at {API_BASE_URL}. Backend may be down. Error: {str(e)}")
+        return {}
+    except requests.exceptions.Timeout:
+        st.error("Request timed out. Backend may be overloaded.")
         return {}
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Unexpected error: {str(e)}")
         return {}
 
 def get_system_status() -> Dict:
@@ -198,12 +209,14 @@ def create_knowledge_graph_viz(kg_stats: Dict) -> go.Figure:
     # Create figure
     fig = go.Figure(data=[edge_trace, node_trace],
                    layout=go.Layout(
-                       title='MOSDAC Knowledge Graph',
-                       titlefont_size=16,
+                       title=dict(
+                           text='MOSDAC Knowledge Graph',
+                           font=dict(size=16)
+                       ),
                        showlegend=False,
                        hovermode='closest',
                        margin=dict(b=20,l=5,r=5,t=40),
-                       annotations=[ dict(
+                       annotations=[dict(
                            text="Interactive Knowledge Graph Visualization",
                            showarrow=False,
                            xref="paper", yref="paper",
@@ -223,6 +236,8 @@ def main():
     # Header
     st.markdown('<h1 class="main-header">🛰️ MOSDAC AI Help Bot</h1>', unsafe_allow_html=True)
     st.markdown("*Advanced AI Assistant for Meteorological and Oceanographic Data*")
+    
+    # Removed backend status indicator as requested
     
     # Sidebar navigation
     with st.sidebar:
@@ -254,6 +269,22 @@ def main():
             'expertise_level': expertise_level,
             'interests': interests
         }
+        
+        # Debug mode toggle
+        st.session_state.debug_mode = st.checkbox("Debug Mode", value=False)
+        
+        # Connection test
+        if st.button("Test Backend Connection"):
+            with st.spinner("Testing connection..."):
+                status = get_system_status()
+                if status:
+                    st.success(f"✅ Backend connected! Status: {status.get('status', 'unknown')}")
+                else:
+                    st.error("❌ Cannot connect to backend")
+        
+        # Show current API URL
+        if st.session_state.get('debug_mode', False):
+            st.info(f"API URL: {API_BASE_URL}")
     
     # Main content based on selection
     if selected == "Chat Interface":
@@ -369,31 +400,41 @@ def knowledge_graph_page():
     # Get KG statistics
     kg_stats = make_api_request("/knowledge-graph/stats")
     
+    # Debug: Print the raw response
+    if st.session_state.get('debug_mode', False):
+        st.json(kg_stats)
+    
     if kg_stats:
+        # Extract statistics with better error handling
+        total_nodes = kg_stats.get("total_nodes") or kg_stats.get("nodes", 0)
+        total_relationships = kg_stats.get("total_relationships") or kg_stats.get("relationships") or kg_stats.get("edges", 0)
+        node_types = kg_stats.get("node_types") or len(kg_stats.get("node_types_dict", {})) or 0
+        relationship_types = kg_stats.get("relationship_types") or len(kg_stats.get("relationship_types_dict", {})) or 0
+        
         # Display statistics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.markdown(
-                f'<div class="metric-card"><h3>{kg_stats.get("total_nodes", 0)}</h3><p>Total Entities</p></div>',
+                f'<div class="metric-card"><h3>{total_nodes}</h3><p>Total Entities</p></div>',
                 unsafe_allow_html=True
             )
         
         with col2:
             st.markdown(
-                f'<div class="metric-card"><h3>{kg_stats.get("total_relationships", 0)}</h3><p>Relationships</p></div>',
+                f'<div class="metric-card"><h3>{total_relationships}</h3><p>Relationships</p></div>',
                 unsafe_allow_html=True
             )
         
         with col3:
             st.markdown(
-                f'<div class="metric-card"><h3>{kg_stats.get("node_types", 0)}</h3><p>Entity Types</p></div>',
+                f'<div class="metric-card"><h3>{node_types}</h3><p>Entity Types</p></div>',
                 unsafe_allow_html=True
             )
         
         with col4:
             st.markdown(
-                f'<div class="metric-card"><h3>{kg_stats.get("relationship_types", 0)}</h3><p>Relation Types</p></div>',
+                f'<div class="metric-card"><h3>{relationship_types}</h3><p>Relation Types</p></div>',
                 unsafe_allow_html=True
             )
         
@@ -540,7 +581,10 @@ def system_status_page():
                 with col2:
                     st.metric("Relationships", kg_stats.get("total_relationships", 0))
                 with col3:
-                    st.metric("Node Types", kg_stats.get("node_types", 0))
+                    # Handle case where node_types might be a dictionary
+                    node_types = kg_stats.get("node_types", {})
+                    node_types_count = len(node_types) if isinstance(node_types, dict) else node_types
+                    st.metric("Node Types", node_types_count)
         
         # Refresh button
         if st.button("🔄 Refresh Status"):

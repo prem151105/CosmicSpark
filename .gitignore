@@ -22,32 +22,35 @@ wheels/
 
 # Virtual Environment
 venv/
+env/
 ENV/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+
+# Data files
+*.db
+*.sqlite3
+*.sqlite
+*.db-journal
+*.sql
+*.sql.gz
 
 # Logs
 logs/
 *.log
 
-# Environment variables
-.env
-.env.*
-!.env.example
-
-# Data directories
-data/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# OS generated files
+# Local development
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+
+# Project specific
+data/
+!data/raw/.gitkeep
+!data/processed/.gitkeep

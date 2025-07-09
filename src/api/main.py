@@ -8,6 +8,7 @@ import src
 
 import asyncio
 import os
+import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
@@ -35,6 +36,7 @@ vector_store: Optional[AdvancedVectorStore] = None
 knowledge_graph: Optional[DynamicKnowledgeGraph] = None
 llm_generator: Optional[ContextAwareGenerator] = None
 crawler: Optional[MOSDACCrawler] = None
+start_time = time.time()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -249,6 +251,16 @@ async def health_check():
         statistics=statistics,
         timestamp=datetime.now().isoformat()
     )
+
+@app.get("/metrics")
+async def get_metrics():
+    """Get system metrics for monitoring"""
+    return {
+        "status": "healthy",
+        "uptime": time.time() - start_time if 'start_time' in globals() else 0,
+        "requests_processed": getattr(app.state, 'requests_processed', 0),
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.post("/query", response_model=QueryResponse)
 async def process_query(request: QueryRequest):
