@@ -39,7 +39,7 @@ CosmicSpark is an advanced knowledge management and retrieval system that combin
    source venv/bin/activate  # Linux/Mac
    
    # Install dependencies
-   pip install -r requirements_clean.txt
+   pip install -r requirements.txt
    ```
 
 2. **Configure Environment**
