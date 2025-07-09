@@ -1,193 +1,177 @@
-# KnowledgeForge AI
+# CosmicSpark: KnowledgeForge AI
 
-KnowledgeForge AI is a powerful knowledge management and retrieval system that combines web crawling, natural language processing, and graph-based knowledge representation to build and query a comprehensive knowledge base.
+CosmicSpark is an advanced knowledge management and retrieval system that combines state-of-the-art NLP, graph-based knowledge representation, and interactive visualization to create a powerful platform for information extraction, processing, and exploration.
 
-## Features
+## 🚀 Key Innovations
 
-- **Web Crawling**: Extract and process content from various web sources
-- **Knowledge Graph**: Store and query relationships between entities
-- **Semantic Search**: Find relevant information using natural language
-- **Document Processing**: Handle multiple document formats (PDF, DOCX, etc.)
-- **Interactive UI**: User-friendly interface for exploring knowledge
+1. **Hybrid Knowledge Representation**
+   - Combines vector embeddings with graph-based relationships
+   - Dynamic schema adaptation based on document content
+   - Multi-hop reasoning across connected entities
 
-## Prerequisites
+2. **Advanced NLP Pipeline**
+   - Custom entity recognition with domain adaptation
+   - Contextual relationship mapping
+   - Multi-modal processing (text, PDFs, web content)
+
+3. **Intelligent Search & Retrieval**
+   - Hybrid search combining BM25 with dense vector search
+   - Context-aware result reranking
+   - Query understanding and expansion
+
+## 🛠️ Prerequisites
 
 - Python 3.9+
-- Neo4j Database (local or remote)
 - pip (Python package manager)
+- (Optional) Neo4j Database for graph features
+- (Recommended) CUDA-enabled GPU for faster inference
 
-## Installation
+## 🚀 Quick Start
 
-1. Clone the repository:
+1. **Clone and Setup**
    ```bash
-   git clone <repository-url>
-   cd KnowledgeForge-AI
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
+   git clone https://github.com/prem151105/CosmicSpark.git
+   cd CosmicSpark
+   
+   # Create and activate virtual environment
    python -m venv venv
    .\venv\Scripts\activate  # Windows
    source venv/bin/activate  # Linux/Mac
-   ```
-
-3. Install dependencies:
-   ```bash
+   
+   # Install dependencies
    pip install -r requirements_clean.txt
    ```
 
-4. Set up environment variables:
-   Create a `.env` file in the root directory with the following content:
+2. **Configure Environment**
+   Copy `.env.example` to `.env` and update the settings:
+   ```bash
+   cp .env.example .env
    ```
-   NEO4J_URI=bolt://localhost:7687
-   NEO4J_USER=neo4j
-   NEO4J_PASSWORD=your_password
-   ```
+   
+   Edit `.env` to configure:
+   - API settings
+   - Database connections
+   - Model parameters
 
-## Running the Application
+## 🚀 Running the Application
 
-### 1. Start the Backend (FastAPI)
-
-Open a terminal and run:
-
+### Backend (FastAPI)
 ```bash
-# Activate virtual environment (if not already activated)
-.\venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
-
-# Start the FastAPI backend
+# Start the API server
 python -m src.api.main
 ```
 
-The backend will start at `http://localhost:8000` by default. Access the API documentation at `http://localhost:8000/docs`.
-
-### 2. Start the Frontend (Streamlit)
-
-Open a new terminal and run:
-
+### Frontend (Streamlit)
 ```bash
-# Activate virtual environment in the new terminal
-.\venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
-
-# Install streamlit if not already installed
-pip install streamlit
-
-# Start the Streamlit frontend
+# In a new terminal
 streamlit run frontend/streamlit_app.py
 ```
 
-The frontend will open automatically in your default web browser at `http://localhost:8501`.
+Access the application at `http://localhost:8501`
 
-### 3. Using the Application
-
-1. The main interface includes:
-   - **Chat Interface**: For asking questions and getting AI responses
-   - **Knowledge Graph**: Visual exploration of entities and relationships
-   - **Document Upload**: Add new documents to the knowledge base
-   - **System Status**: Monitor the health of the application
-
-2. To test the system:
-   - Try asking questions in the chat interface
-   - Upload documents to expand the knowledge base
-   - Explore the knowledge graph visualization
-
-## Development
-
-### Project Structure
+## 🏗️ Project Structure
 
 ```
-KnowledgeForge/
-├── src/                    # Source code
-│   ├── api/                # FastAPI application
-│   ├── knowledge_graph/    # Knowledge graph components
-│   ├── models/             # ML models and embeddings
-│   └── rag/                # Retrieval-Augmented Generation
-├── frontend/               # Streamlit frontend
-│   ├── components/         # Reusable UI components
-│   └── streamlit_app.py    # Main frontend application
+CosmicSpark/
 ├── data/                   # Data storage
-├── tests/                  # Test files
-├── .env.example            # Example environment variables
-└── requirements.txt        # Python dependencies
+│   ├── chromadb/           # Vector embeddings
+│   ├── knowledge_graph/    # Graph database files
+│   ├── processed/          # Processed documents
+│   └── raw/                # Raw input data
+│
+├── frontend/               # Streamlit UI
+│   ├── components/         # Reusable UI components
+│   │   ├── chat_interface.py
+│   │   └── knowledge_graph_viz.py
+│   └── streamlit_app.py    # Main application
+│
+├── src/                    # Core application code
+│   ├── api/                # FastAPI endpoints
+│   │   ├── endpoints.py
+│   │   └── main.py
+│   │
+│   ├── crawler/            # Web crawling and processing
+│   │   ├── content_extractor.py
+│   │   ├── pdf_processor.py
+│   │   └── web_crawler.py
+│   │
+│   ├── knowledge_graph/    # Knowledge graph components
+│   │   ├── entity_extractor.py
+│   │   ├── kg_builder.py
+│   │   └── relationship_mapper.py
+│   │
+│   ├── models/             # ML models
+│   │   ├── embedding_model.py
+│   │   └── llm_handler.py
+│   │
+│   └── rag/                # Retrieval-Augmented Generation
+│       ├── generator.py
+│       ├── retriever.py
+│       └── vector_store.py
+│
+├── .env.example           # Example environment config
+├── requirements_clean.txt # Dependencies
+└── README.md             # This file
 ```
+
+## 🛠️ Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the root directory with the following variables:
-
-```
-# API Configuration
+```env
+# Server Configuration
 API_HOST=0.0.0.0
 API_PORT=8000
+DEBUG=True
 
-# Neo4j Configuration (Optional)
+# Vector Store
+VECTOR_STORE_PATH=./data/chromadb
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# Knowledge Graph (Optional)
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your_password
 
 # LLM Configuration
-LLM_MODEL=llama3  # or any other supported model
+LLM_MODEL=llama3
 LLM_TEMPERATURE=0.7
-
-# Vector Store
-VECTOR_STORE_PATH=./data/vector_store
+MAX_TOKENS=1024
 ```
 
-## Troubleshooting
+## 🚀 Deployment
 
-1. **Port Conflicts**: If ports 8000 (backend) or 8501 (frontend) are in use, update the respective configuration.
+### Production Setup
+1. Set up a production-grade server (Nginx/Apache)
+2. Use Gunicorn/Uvicorn for ASGI server
+3. Configure environment variables in production
+4. Set up monitoring and logging
 
-2. **Missing Dependencies**: Ensure all dependencies are installed:
-   ```bash
-   pip install -r requirements.txt
-   ```
 
-3. **Neo4j Connection**: The application can run without Neo4j, but some features may be limited. To use Neo4j:
-   - Install Neo4j Desktop or Docker
-   - Update the `.env` file with your Neo4j credentials
-   - Ensure the database is running before starting the backend
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-cd src/api
-uvicorn main:app --reload
-```
-
-### Frontend (Streamlit)
-```bash
-streamlit run frontend/streamlit_app.py
-```
-
-## Project Structure
-
-```
-KnowledgeForge-AI/
-├── src/                    # Source code
-│   ├── api/                # FastAPI backend
-│   ├── crawler/            # Web crawling components
-│   ├── models/             # Data models
-│   └── utils/              # Utility functions
-├── data/                   # Data storage
-│   ├── raw/                # Raw crawled data
-│   └── processed/          # Processed data
-├── requirements_clean.txt   # Project dependencies
-└── .env.example           # Example environment variables
-```
-
-## Configuration
-
-Update the `.env` file with your Neo4j database credentials and other configuration options.
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [CosmicSpark](LICENSE) file for details.
+
+## ✨ Key Features in Action
+
+- **Real-time Knowledge Graph Updates**: See relationships form as you add documents
+- **Context-Aware Chat**: Get precise answers with source attribution
+- **Document Intelligence**: Extract and link entities across multiple documents
+- **Scalable Architecture**: Built to handle thousands of documents
+
+## 📚 Documentation
+
+For detailed documentation, please refer to the [docs](docs/) directory.
+
+## 📬 Contact
+
+For questions or feedback, please open an issue or contact the maintainers.

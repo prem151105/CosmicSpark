@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Environment Setup Script for MOSDAC AI Help Bot
+Environment Setup Script for CosmicSpark
 Sets up the complete development and production environment
 """
 
@@ -11,6 +11,7 @@ import argparse
 from pathlib import Path
 import json
 import time
+import importlib.util
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -39,30 +40,29 @@ def run_command(command: str, check: bool = True) -> subprocess.CompletedProcess
             logger.error(f"Error: {e.stderr}")
         raise
 
-def check_docker():
-    """Check if Docker is installed and running"""
-    try:
-        result = run_command("docker --version", check=False)
+def check_requirements():
+    """Check if required tools are installed"""
+    required_tools = {
+        "python": "Python 3.8+",
+        "pip": "pip package manager",
+        "git": "Git version control"
+    }
+    
+    all_available = True
+    for tool, description in required_tools.items():
+        result = run_command(f"{tool} --version", check=False)
         if result.returncode != 0:
-            logger.error("Docker is not installed or not in PATH")
-            return False
-        
-        result = run_command("docker info", check=False)
-        if result.returncode != 0:
-            logger.error("Docker daemon is not running")
-            return False
-        
-        logger.info("Docker is available and running")
-        return True
-    except Exception as e:
-        logger.error(f"Error checking Docker: {e}")
-        return False
+            logger.error(f"{description} is not installed or not in PATH")
+            all_available = False
+        else:
+            logger.info(f"✓ {description} is available")
+    
+    return all_available
 
 def setup_ollama():
     """Setup Ollama and download required models"""
     logger.info("Setting up Ollama...")
     
-    # Check if Ollama is running
     try:
         import requests
         response = requests.get("http://localhost:11434/api/tags", timeout=5)
@@ -81,30 +81,51 @@ def setup_ollama():
                 else:
                     logger.info(f"Model {model} already available")
         else:
-            logger.warning("Ollama API not responding")
+            logger.warning("Ollama API not responding. Make sure Ollama is installed and running.")
+            logger.info("Download from: https://ollama.ai/")
     except Exception as e:
         logger.warning(f"Could not connect to Ollama: {e}")
-        logger.info("Please ensure Ollama is installed and running")
+        logger.info("Ollama is optional but recommended for local LLM inference")
 
 def setup_neo4j():
-    """Setup Neo4j database"""
+    """Setup Neo4j database (optional)"""
     logger.info("Setting up Neo4j...")
     
-    # Check if Neo4j is running via Docker
     try:
-        result = run_command("docker ps --filter name=mosdac-neo4j --format '{{.Names}}'", check=False)
-        if "mosdac-neo4j" in result.stdout:
-            logger.info("Neo4j container is already running")
-        else:
-            logger.info("Starting Neo4j container...")
-            run_command("docker-compose up -d neo4j")
+        # Check if neo4j package is installed
+        neo4j_spec = importlib.util.find_spec("neo4j")
+        if neo4j_spec is None:
+            logger.warning("Neo4j Python driver not installed. Some features may be limited.")
+            logger.info("To enable Neo4j features, install it with: pip install neo4j")
+            return False
             
-            # Wait for Neo4j to be ready
-            logger.info("Waiting for Neo4j to be ready...")
-            time.sleep(30)
+        # Try to connect to Neo4j if configured
+        from neo4j import GraphDatabase
+        from neo4j.exceptions import ServiceUnavailable
+        
+        try:
+            uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+            auth = (
+                os.getenv("NEO4J_USER", "neo4j"),
+                os.getenv("NEO4J_PASSWORD", "password")
+            )
+            
+            driver = GraphDatabase.driver(uri, auth=auth)
+            with driver.session() as session:
+                session.run("RETURN 1")
+                
+            logger.info("✓ Successfully connected to Neo4j database")
+            return True
+            
+        except ServiceUnavailable:
+            logger.warning("Could not connect to Neo4j. Some features may be limited.")
+            logger.info("To use Neo4j, make sure it's running and update the .env file with the correct credentials")
+            return False
             
     except Exception as e:
-        logger.error(f"Error setting up Neo4j: {e}")
+        logger.warning(f"Neo4j setup warning: {e}")
+        logger.info("The application can run without Neo4j, but some features will be limited.")
+        return False
 
 def setup_python_environment():
     """Setup Python environment and install dependencies"""
@@ -120,7 +141,7 @@ def setup_python_environment():
     
     # Install requirements
     logger.info("Installing Python dependencies...")
-    run_command("pip install -r requirements.txt")
+    run_command("pip install -r requirements_clean.txt")
     
     # Download spaCy model
     logger.info("Downloading spaCy model...")
@@ -139,9 +160,7 @@ def setup_directories():
         "data/processed", 
         "data/knowledge_graph",
         "data/chromadb",
-        "logs",
-        "monitoring",
-        "ssl"
+        "logs"
     ]
     
     for dir_path in additional_dirs:
@@ -158,7 +177,7 @@ def create_env_file():
     
     logger.info("Creating .env file...")
     
-    env_content = """# MOSDAC AI Help Bot Configuration
+    env_content = """# CosmicSpark Configuration
 
 # API Configuration
 API_HOST=0.0.0.0
@@ -176,24 +195,9 @@ OLLAMA_BASE_URL=http://localhost:11434
 DEFAULT_LLM_MODEL=llama2:7b-chat
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 
-# Crawler Configuration
-CRAWLER_USER_AGENT=MOSDAC-Crawler/1.0
-CRAWLER_DELAY=1.0
-CRAWLER_MAX_PAGES=1000
-
-# Security
-SECRET_KEY=your-secret-key-change-in-production
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
 # Logging
 LOG_LEVEL=INFO
 LOG_FILE=./logs/app.log
-
-# Data Paths
-DATA_DIR=./data
-RAW_DATA_DIR=./data/raw
-PROCESSED_DATA_DIR=./data/processed
-KG_DATA_DIR=./data/knowledge_graph
 """
     
     with open(env_file, 'w') as f:
@@ -226,8 +230,7 @@ def run_initial_tests():
 
 def main():
     """Main setup function"""
-    parser = argparse.ArgumentParser(description="MOSDAC Environment Setup")
-    parser.add_argument("--skip-docker", action="store_true", help="Skip Docker setup")
+    parser = argparse.ArgumentParser(description="CosmicSpark Environment Setup")
     parser.add_argument("--skip-models", action="store_true", help="Skip model downloads")
     parser.add_argument("--skip-tests", action="store_true", help="Skip initial tests")
     parser.add_argument("--production", action="store_true", help="Production setup")
@@ -237,33 +240,34 @@ def main():
     # Setup logging
     setup_logger()
     
-    logger.info("🚀 Starting MOSDAC AI Help Bot Environment Setup")
+    logger.info("🚀 Starting CosmicSpark Environment Setup")
     logger.info("=" * 60)
     
     try:
-        # Step 1: Setup directories
+        # Step 1: Check requirements
+        if not check_requirements():
+            logger.error("Some required tools are missing. Please install them and try again.")
+            return 1
+        
+        # Step 2: Setup directories
         setup_directories()
         
-        # Step 2: Create environment file
+        # Step 3: Create environment file if it doesn't exist
         create_env_file()
         
-        # Step 3: Setup Python environment
+        # Step 4: Setup Python environment
         if not setup_python_environment():
             logger.error("Python environment setup failed")
             return 1
         
-        # Step 4: Docker setup
-        if not args.skip_docker:
-            if check_docker():
-                setup_neo4j()
-            else:
-                logger.warning("Skipping Docker setup - Docker not available")
+        # Step 5: Setup Neo4j (optional)
+        setup_neo4j()
         
-        # Step 5: Setup Ollama
+        # Step 6: Setup Ollama (optional)
         if not args.skip_models:
             setup_ollama()
         
-        # Step 6: Run tests
+        # Step 7: Run tests
         if not args.skip_tests:
             if not run_initial_tests():
                 logger.warning("Some tests failed - please check the setup")
@@ -273,17 +277,13 @@ def main():
         logger.info("🎉 Environment setup completed successfully!")
         logger.info("")
         logger.info("Next steps:")
-        logger.info("1. Start the services: docker-compose up -d")
-        logger.info("2. Run the crawler: python scripts/run_crawler.py --url https://www.mosdac.gov.in")
-        logger.info("3. Build knowledge graph: python scripts/build_knowledge_graph.py --input data/crawled_data.json")
-        logger.info("4. Start the API: python -m src.api.main")
-        logger.info("5. Start the frontend: streamlit run frontend/streamlit_app.py")
+        logger.info("1. Start the backend: python -m src.api.main")
+        logger.info("2. In a new terminal, start the frontend: streamlit run frontend/streamlit_app.py")
         logger.info("")
         logger.info("Access points:")
         logger.info("- Frontend: http://localhost:8501")
         logger.info("- API: http://localhost:8000")
-        logger.info("- Neo4j Browser: http://localhost:7474")
-        logger.info("- Grafana: http://localhost:3000")
+        logger.info("- API Documentation: http://localhost:8000/docs")
         
         return 0
         

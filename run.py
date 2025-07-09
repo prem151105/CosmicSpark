@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MOSDAC AI Help Bot - Main Runner Script
+CosmicSpark - Main Runner Script
 Provides easy commands to run different components of the system
 """
 
@@ -9,19 +9,30 @@ import subprocess
 import sys
 import os
 import time
+import signal
 from pathlib import Path
+import webbrowser
 
-def run_command(command: str, cwd: str = None):
+def run_command(command: str, cwd: str = None, wait: bool = True):
     """Run a command with proper error handling"""
     print(f"🚀 Running: {command}")
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            cwd=cwd,
-            check=True
-        )
-        return result.returncode == 0
+        if wait:
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=cwd,
+                check=True
+            )
+            return result.returncode == 0
+        else:
+            # For non-blocking commands
+            return subprocess.Popen(
+                command,
+                shell=True,
+                cwd=cwd,
+                start_new_session=True
+            )
     except subprocess.CalledProcessError as e:
         print(f"❌ Command failed with exit code {e.returncode}")
         return False
@@ -31,28 +42,18 @@ def run_command(command: str, cwd: str = None):
 
 def setup_environment():
     """Setup the development environment"""
-    print("🔧 Setting up MOSDAC AI Help Bot environment...")
+    print("🔧 Setting up CosmicSpark environment...")
     return run_command("python scripts/setup_environment.py")
-
-def start_services():
-    """Start all Docker services"""
-    print("🐳 Starting Docker services...")
-    return run_command("docker-compose up -d")
-
-def stop_services():
-    """Stop all Docker services"""
-    print("🛑 Stopping Docker services...")
-    return run_command("docker-compose down")
 
 def start_backend():
     """Start the FastAPI backend"""
     print("🔧 Starting backend API...")
-    return run_command("python -m src.api.main")
+    return run_command("uvicorn src.api.main:app --reload", wait=False)
 
 def start_frontend():
     """Start the Streamlit frontend"""
     print("🎨 Starting frontend...")
-    return run_command("streamlit run frontend/streamlit_app.py")
+    return run_command("streamlit run frontend/streamlit_app.py", wait=False)
 
 def run_crawler():
     """Run the web crawler"""
@@ -79,9 +80,7 @@ def check_health():
     # Check if services are running
     services = [
         ("Backend API", "http://localhost:8000/health"),
-        ("Frontend", "http://localhost:8501"),
-        ("Neo4j", "http://localhost:7474"),
-        ("Ollama", "http://localhost:11434/api/tags")
+        ("Frontend", "http://localhost:8501")
     ]
     
     try:
@@ -135,44 +134,65 @@ def clean_data():
     
     return True
 
-def full_setup():
-    """Complete setup and initialization"""
-    print("🚀 Running full MOSDAC AI Help Bot setup...")
+def run_development():
+    """Run the application in development mode"""
+    print("🚀 Starting CosmicSpark in development mode...")
     
-    steps = [
-        ("Environment Setup", setup_environment),
-        ("Start Services", start_services),
-        ("Wait for Services", lambda: time.sleep(30) or True),
-        ("Run Crawler", run_crawler),
-        ("Build Knowledge Graph", build_knowledge_graph),
-        ("Health Check", check_health)
-    ]
+    processes = []
     
-    for step_name, step_func in steps:
-        print(f"\n📋 Step: {step_name}")
-        if not step_func():
-            print(f"❌ Failed at step: {step_name}")
-            return False
-        print(f"✅ Completed: {step_name}")
-    
-    print("\n🎉 Full setup completed successfully!")
-    print("\n📍 Access points:")
-    print("   Frontend: http://localhost:8501")
-    print("   API Docs: http://localhost:8000/docs")
-    print("   Neo4j: http://localhost:7474")
-    print("   Grafana: http://localhost:3000")
-    
-    return True
+    try:
+        # Start backend
+        print("\n🔧 Starting Backend API...")
+        backend_proc = start_backend()
+        processes.append(backend_proc)
+        
+        # Wait for backend to start
+        print("⏳ Waiting for backend to start...")
+        time.sleep(5)
+        
+        # Open API docs in browser
+        print("🌐 Opening API documentation in browser...")
+        webbrowser.open("http://localhost:8000/docs")
+        
+        # Start frontend
+        print("\n🎨 Starting Frontend...")
+        frontend_proc = start_frontend()
+        processes.append(frontend_proc)
+        
+        print("\n🚀 Development server is running!")
+        print("Press Ctrl+C to stop all services")
+        
+        # Keep the script running
+        while True:
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Stopping all services...")
+        for proc in processes:
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                except (subprocess.TimeoutExpired, ProcessLookupError):
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+        print("✅ All services stopped")
+        return True
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
 
 def main():
     """Main function with command-line interface"""
     parser = argparse.ArgumentParser(
-        description="MOSDAC AI Help Bot Runner",
+        description="CosmicSpark Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python run.py setup          # Setup environment
-  python run.py start          # Start all services
+  python run.py dev            # Start development server (backend + frontend)
   python run.py backend        # Start backend only
   python run.py frontend       # Start frontend only
   python run.py crawl          # Run web crawler
@@ -181,16 +201,15 @@ Examples:
   python run.py health         # Check system health
   python run.py logs           # Show logs
   python run.py clean          # Clean data
-  python run.py full-setup     # Complete setup
         """
     )
     
     parser.add_argument(
         "command",
         choices=[
-            "setup", "start", "stop", "backend", "frontend",
+            "setup", "dev", "backend", "frontend",
             "crawl", "build-kg", "test", "health", "logs",
-            "clean", "full-setup"
+            "clean"
         ],
         help="Command to execute"
     )
@@ -200,8 +219,7 @@ Examples:
     # Command mapping
     commands = {
         "setup": setup_environment,
-        "start": start_services,
-        "stop": stop_services,
+        "dev": run_development,
         "backend": start_backend,
         "frontend": start_frontend,
         "crawl": run_crawler,
@@ -209,19 +227,19 @@ Examples:
         "test": run_tests,
         "health": check_health,
         "logs": show_logs,
-        "clean": clean_data,
-        "full-setup": full_setup
+        "clean": clean_data
     }
     
     # Execute command
     success = commands[args.command]()
     
-    if success:
-        print(f"\n✅ Command '{args.command}' completed successfully!")
-        sys.exit(0)
-    else:
-        print(f"\n❌ Command '{args.command}' failed!")
-        sys.exit(1)
+    if success is not None:  # Some commands like 'dev' might return None
+        if success:
+            print(f"\n✅ Command '{args.command}' completed successfully!")
+            sys.exit(0)
+        else:
+            print(f"\n❌ Command '{args.command}' failed!")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
